@@ -1,5 +1,6 @@
 using UnityEngine;
 using UnityEngine.UI;
+using System.Collections;
 
 public class ScrubInteraction : Interaction
 {
@@ -8,30 +9,55 @@ public class ScrubInteraction : Interaction
     [SerializeField] private float m_KeyboardScrubAmount = 30f;
     [SerializeField] private KeyCode m_ScrubKey = KeyCode.F;
 
-    [Header("Visual Feedback")]
-    [SerializeField] private Renderer m_TargetRenderer;
-    [SerializeField] private Material m_DirtyMaterial;
-    [SerializeField] private Material m_CleanMaterial;
+    [Header("Painting Visual")]
+    [SerializeField] private Renderer m_PaintingRenderer;
+    [SerializeField] private Texture2D m_CleanTexture;
+    [SerializeField] private float m_StartBrightness = 0.15f;
+    [SerializeField] private float m_RevealAnimDuration = 0.8f;
+
+    [Header("Spider Web Quad")]
+    [SerializeField] private Renderer m_SpiderWebRenderer;
+
+    [Header("Code Reveal")]
+    [SerializeField] private GameObject m_CodeReveal;
 
     [Header("Scrubbing UI")]
-    [SerializeField] private string m_ScrubPromptMessage = "Frottez!";
+    [SerializeField] private string m_ScrubPromptMessage = "Frottez la toile !";
     [SerializeField] private Image m_ProgressBarFill;
     [SerializeField] private GameObject m_ProgressBarRoot;
 
     [Header("Player")]
     [SerializeField] private GameObject m_PlayerVisual;
 
-    private float m_ScrubDistanceAccumulated = 0f;
+    private float m_ScrubDistanceAccumulated;
     private Vector2 m_LastMousePosition;
-    private bool m_IsScrubbing = false;
+    private bool m_IsScrubbing;
+    private Material m_PaintingMat;
+    private Material m_WebMat;
 
     protected override void OnInteractionStarted()
     {
         m_ScrubDistanceAccumulated = 0f;
         m_IsScrubbing = false;
-        UpdateProgressBar(0f);
-        UpdateCleanVisual(0f);
 
+        if (m_PaintingRenderer != null)
+        {
+            m_PaintingMat = new Material(m_PaintingRenderer.material);
+            if (m_CleanTexture != null)
+                m_PaintingMat.mainTexture = m_CleanTexture;
+            m_PaintingMat.color = new Color(m_StartBrightness, m_StartBrightness, m_StartBrightness, 1f);
+            m_PaintingRenderer.material = m_PaintingMat;
+        }
+
+        if (m_SpiderWebRenderer != null)
+        {
+            m_WebMat = new Material(m_SpiderWebRenderer.material);
+            m_SpiderWebRenderer.material = m_WebMat;
+            SetWebAlpha(1f);
+            m_SpiderWebRenderer.gameObject.SetActive(true);
+        }
+
+        UpdateProgressBar(0f);
         if (m_ProgressBarRoot != null)
             m_ProgressBarRoot.SetActive(true);
 
@@ -49,16 +75,30 @@ public class ScrubInteraction : Interaction
             AddProgress(m_KeyboardScrubAmount);
     }
 
+    protected override void OnInteractionCompleted()
+    {
+        StartCoroutine(RevealPainting());
+
+        if (m_ProgressBarRoot != null)
+            m_ProgressBarRoot.SetActive(false);
+
+        if (m_SpiderWebRenderer != null)
+            m_SpiderWebRenderer.gameObject.SetActive(false);
+
+        if (m_PlayerVisual != null)
+            m_PlayerVisual.SetActive(true);
+
+        if (m_CodeReveal != null)
+            m_CodeReveal.SetActive(true);
+
+        GameManager.Instance?.RegisterCompletedInteraction("board");
+    }
+
     private void HandleMouseScrub()
     {
-        if (Input.GetMouseButtonDown(0))
-            BeginScrub();
-
-        if (Input.GetMouseButton(0) && m_IsScrubbing)
-            AccumulateMouseScrub();
-
-        if (Input.GetMouseButtonUp(0))
-            m_IsScrubbing = false;
+        if (Input.GetMouseButtonDown(0)) BeginScrub();
+        if (Input.GetMouseButton(0) && m_IsScrubbing) AccumulateMouseScrub();
+        if (Input.GetMouseButtonUp(0)) m_IsScrubbing = false;
     }
 
     private void BeginScrub()
@@ -69,9 +109,9 @@ public class ScrubInteraction : Interaction
 
     private void AccumulateMouseScrub()
     {
-        Vector2 currentMousePosition = Input.mousePosition;
-        float delta = Vector2.Distance(currentMousePosition, m_LastMousePosition);
-        m_LastMousePosition = currentMousePosition;
+        Vector2 current = Input.mousePosition;
+        float delta = Vector2.Distance(current, m_LastMousePosition);
+        m_LastMousePosition = current;
         AddProgress(delta);
     }
 
@@ -79,19 +119,33 @@ public class ScrubInteraction : Interaction
     {
         m_ScrubDistanceAccumulated += amount;
         float progress = Mathf.Clamp01(m_ScrubDistanceAccumulated / m_ScrubDistanceRequired);
+
         UpdateProgressBar(progress);
-        UpdateCleanVisual(progress);
+        UpdateWebAlpha(progress);
+        UpdatePaintingBrightness(progress);
 
         if (m_ScrubDistanceAccumulated >= m_ScrubDistanceRequired)
             CompleteInteraction();
     }
 
-    private void UpdateCleanVisual(float progress)
+    private void UpdateWebAlpha(float progress)
     {
-        if (m_TargetRenderer == null || m_DirtyMaterial == null || m_CleanMaterial == null)
-            return;
+        SetWebAlpha(1f - progress);
+    }
 
-        m_TargetRenderer.material.Lerp(m_DirtyMaterial, m_CleanMaterial, progress);
+    private void SetWebAlpha(float alpha)
+    {
+        if (m_WebMat == null) return;
+        Color c = m_WebMat.color;
+        c.a = alpha;
+        m_WebMat.color = c;
+    }
+
+    private void UpdatePaintingBrightness(float progress)
+    {
+        if (m_PaintingMat == null) return;
+        float brightness = Mathf.Lerp(m_StartBrightness, 1f, progress);
+        m_PaintingMat.color = new Color(brightness, brightness, brightness, 1f);
     }
 
     private void UpdateProgressBar(float progress)
@@ -100,25 +154,27 @@ public class ScrubInteraction : Interaction
             m_ProgressBarFill.fillAmount = progress;
     }
 
-    protected override void OnInteractionCompleted()
+    private IEnumerator RevealPainting()
     {
-        if (m_ProgressBarRoot != null)
-            m_ProgressBarRoot.SetActive(false);
+        if (m_PaintingMat == null) yield break;
 
-        if (m_PlayerVisual != null)
-            m_PlayerVisual.SetActive(true);
+        float elapsed = 0f;
+        while (elapsed < m_RevealAnimDuration)
+        {
+            elapsed += Time.deltaTime;
+            float t = elapsed / m_RevealAnimDuration;
+            float brightness = Mathf.Lerp(1.5f, 1f, t);
+            m_PaintingMat.color = new Color(brightness, brightness, brightness, 1f);
+            yield return null;
+        }
 
-        if (m_TargetRenderer != null && m_CleanMaterial != null)
-            m_TargetRenderer.material = new Material(m_CleanMaterial);
-
-        GameManager.Instance?.RegisterCompletedInteraction();
+        m_PaintingMat.color = Color.white;
     }
 
     public void ReceiveOscJoystick(float x, float y)
     {
         if (!m_IsInteracting) return;
-        float magnitude = new Vector2(x, y).magnitude;
-        AddProgress(magnitude * m_KeyboardScrubAmount);
+        AddProgress(new Vector2(x, y).magnitude * m_KeyboardScrubAmount);
     }
 
     public void ReceiveOscScrub(float value)

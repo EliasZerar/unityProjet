@@ -2,6 +2,7 @@ using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.UI;
+using UnityEngine.Video;
 using TMPro;
 
 public class StoveInteraction : Interaction
@@ -18,30 +19,51 @@ public class StoveInteraction : Interaction
     [SerializeField] private Image m_Plate4;
 
     [Header("Colors")]
-    [SerializeField] private Color m_OffColor = new Color(0.2f, 0.2f, 0.2f);
-    [SerializeField] private Color m_OnColor = new Color(1f, 0.4f, 0f);
-    [SerializeField] private Color m_SuccessColor = new Color(0.2f, 0.9f, 0.2f);
-    [SerializeField] private Color m_ErrorColor = new Color(0.9f, 0.1f, 0.1f);
+    [SerializeField] private Color m_OffColor     = new Color(0.2f, 0.2f, 0.2f);
+    [SerializeField] private Color m_Color1       = new Color(0.2f, 0.9f, 0.2f);
+    [SerializeField] private Color m_Color2       = new Color(0.2f, 0.4f, 1.0f);
+    [SerializeField] private Color m_Color3       = new Color(1.0f, 0.9f, 0.0f);
+    [SerializeField] private Color m_Color4       = new Color(0.9f, 0.1f, 0.1f);
+    [SerializeField] private Color m_SuccessColor = new Color(1.0f, 1.0f, 1.0f);
+    [SerializeField] private Color m_ErrorColor   = new Color(0.5f, 0.0f, 0.0f);
 
     [Header("UI")]
     [SerializeField] private TextMeshProUGUI m_InstructionText;
     [SerializeField] private GameObject m_StoveUIRoot;
     [SerializeField] private GameObject m_PlayerVisual;
 
+    [Header("Video")]
+    [SerializeField] private VideoPlayer m_VideoPlayer;
+
+    [Header("Code Reveal")]
+    [SerializeField] private GameObject m_CodeReveal;
+
+    [Header("Task List")]
+    [SerializeField] private GameObject m_TaskListRoot;
+
+    [Header("Audio")]
+    [SerializeField] private AudioSource m_AudioSource;
+    [SerializeField] private AudioClip m_TvOnClip;
+
     private List<int> m_Sequence = new List<int>();
     private int m_PlayerIndex = 0;
     private bool m_PlayerCanInput = false;
     private Image[] m_Plates;
+    private Color[] m_PlateColors;
 
     protected override void OnInteractionStarted()
     {
-        m_Plates = new Image[] { m_Plate1, m_Plate2, m_Plate3, m_Plate4 };
+        m_Plates      = new Image[] { m_Plate1, m_Plate2, m_Plate3, m_Plate4 };
+        m_PlateColors = new Color[] { m_Color1, m_Color2, m_Color3, m_Color4 };
 
         if (m_StoveUIRoot != null)
             m_StoveUIRoot.SetActive(true);
 
         if (m_PlayerVisual != null)
             m_PlayerVisual.SetActive(false);
+
+        if (m_TaskListRoot != null)
+            m_TaskListRoot.SetActive(false);
 
         ResetPlates();
         GenerateSequence();
@@ -68,13 +90,20 @@ public class StoveInteraction : Interaction
     private IEnumerator PlaySequence()
     {
         m_PlayerCanInput = false;
+
+        if (m_StoveUIRoot != null)
+            m_StoveUIRoot.SetActive(true);
+
+        if (m_TaskListRoot != null)
+            m_TaskListRoot.SetActive(false);
+
         SetInstruction("Observe la séquence...");
 
         yield return new WaitForSeconds(0.5f);
 
         foreach (int index in m_Sequence)
         {
-            yield return StartCoroutine(FlashPlate(index, m_OnColor));
+            yield return StartCoroutine(FlashPlate(index, m_PlateColors[index]));
             yield return new WaitForSeconds(m_BetweenDelay);
         }
 
@@ -94,7 +123,7 @@ public class StoveInteraction : Interaction
     {
         if (!m_PlayerCanInput) return;
 
-        StartCoroutine(FlashPlate(index, m_SuccessColor));
+        StartCoroutine(FlashPlate(index, m_PlateColors[index]));
 
         if (m_Sequence[m_PlayerIndex] == index)
         {
@@ -127,6 +156,21 @@ public class StoveInteraction : Interaction
         if (m_PlayerVisual != null)
             m_PlayerVisual.SetActive(true);
 
+        if (m_VideoPlayer != null)
+        {
+            m_VideoPlayer.isLooping = true;
+            m_VideoPlayer.Play();
+        }
+
+        if (m_AudioSource != null && m_TvOnClip != null)
+            m_AudioSource.PlayOneShot(m_TvOnClip);
+
+        if (m_CodeReveal != null)
+            m_CodeReveal.SetActive(true);
+
+        if (m_TaskListRoot != null)
+            m_TaskListRoot.SetActive(true);
+
         CompleteInteraction();
     }
 
@@ -141,6 +185,12 @@ public class StoveInteraction : Interaction
         ResetPlates();
         GenerateSequence();
         StartCoroutine(PlaySequence());
+    }
+
+    public void HideStoveUI()
+    {
+        if (m_StoveUIRoot != null)
+            m_StoveUIRoot.SetActive(false);
     }
 
     private void ResetPlates()
@@ -164,7 +214,7 @@ public class StoveInteraction : Interaction
 
     protected override void OnInteractionCompleted()
     {
-        GameManager.Instance?.RegisterCompletedInteraction();
+        GameManager.Instance?.RegisterCompletedInteraction("stove");
     }
 
     public void ReceiveOscButton1() { HandleInput(0); }

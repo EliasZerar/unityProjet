@@ -1,9 +1,7 @@
 using UnityEngine;
 using TMPro;
 
-/// Displays and hides the interaction prompt UI (e.g. "Press E to interact").
-/// Attach this to a World Space Canvas placed above the interactable object,
-/// or to a Screen Space Canvas managed by each interactable.
+
 public class InteractionPrompt : MonoBehaviour
 {
     [SerializeField] private GameObject m_PromptRoot;

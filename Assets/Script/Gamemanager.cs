@@ -13,18 +13,31 @@ public class GameManager : MonoBehaviour
     [SerializeField] private GameObject m_StoryPanel;
     [SerializeField] private GameObject m_TimerPanel;
     [SerializeField] private TextMeshProUGUI m_IntroTextDisplay;
+    [SerializeField] private StoveInteraction m_StoveInteraction;
+
+    [Header("Task List")]
+    [SerializeField] private GameObject m_TaskListRoot;
+    [SerializeField] private TextMeshProUGUI m_TaskTv;
+    [SerializeField] private TextMeshProUGUI m_TaskBoard;
+
+    [Header("Audio")]
+    [SerializeField] private AudioSource m_AudioSource;
+    [SerializeField] private AudioClip m_VictoryClip;
+    [SerializeField] private AudioClip m_GameOverClip;
 
     [Header("Story Intro")]
     [TextArea(3, 8)]
     [SerializeField] private string m_IntroText =
-        "Tu te réveilles seul dans un appartement abandonné.\n" +
-        "Une odeur étrange flotte dans l'air. Tu dois nettoyer les lieux\n" +
-        "et trouver les indices avant l'arrivée de l'inspecteur.\n\n" +
-        "Tu as 2 minutes.";
+    "Tu te réveilles dans un appartement abandonné.\n" +
+    "Quelqu'un a dissimulé un code secret dans cette pièce.\n\n" +
+    "Nettoie le tableau pour révéler les premiers chiffres.\n" +
+    "Résous le simon sur la télévision pour découvrir les suivants.\n\n" +
+    "Entre le code sur la porte et fuis avant que le temps ne s'écoule.\n\n" +
+    "Tu as 2 minutes.\n\n" +
+    "Appuie sur ESPACE pour commencer.";
 
-    private int m_CompletedInteractions = 0;
-    private const int INTERACTIONS_REQUIRED = 2;
     private CapsuleMovement m_PlayerMovement;
+    private bool m_CanRestart = false;
 
     private void Awake()
     {
@@ -42,13 +55,34 @@ public class GameManager : MonoBehaviour
         ShowStoryIntro();
     }
 
+    private void Update()
+    {
+        if (m_StoryPanel != null && m_StoryPanel.activeSelf)
+        {
+            if (Input.GetKeyDown(KeyCode.Space) || Input.GetKeyDown(KeyCode.F))
+                StartGame();
+        }
+
+        if (m_CanRestart &&
+            (m_GameOverPanel != null && m_GameOverPanel.activeSelf ||
+             m_VictoryPanel != null && m_VictoryPanel.activeSelf))
+        {
+            if (Input.anyKeyDown)
+                RestartGame();
+        }
+    }
+
     public void StartGame()
     {
-        if (m_StoryPanel != null)
-            m_StoryPanel.SetActive(false);
+        if (m_StoryPanel == null || !m_StoryPanel.activeSelf) return;
+
+        m_StoryPanel.SetActive(false);
 
         if (m_TimerPanel != null)
             m_TimerPanel.SetActive(true);
+
+        if (m_TaskListRoot != null)
+            m_TaskListRoot.SetActive(true);
 
         m_PlayerMovement?.EnableMovement();
         m_TaskTimer?.StartTimer();
@@ -58,17 +92,28 @@ public class GameManager : MonoBehaviour
     {
         m_TaskTimer?.StopTimer();
         m_PlayerMovement?.DisableMovement();
+        m_StoveInteraction?.HideStoveUI();
+
+        if (m_TaskListRoot != null)
+            m_TaskListRoot.SetActive(false);
+
         ShowGameOver();
     }
 
-    public void RegisterCompletedInteraction()
+    public void RegisterCompletedInteraction(string taskType)
     {
-        m_CompletedInteractions++;
-
-        if (m_CompletedInteractions >= INTERACTIONS_REQUIRED)
+        if (taskType == "stove" && m_TaskTv != null)
+            m_TaskTv.gameObject.SetActive(false);
+        else if (taskType == "board" && m_TaskBoard != null)
+            m_TaskBoard.gameObject.SetActive(false);
+        else if (taskType == "door")
         {
             m_TaskTimer?.StopTimer();
             m_PlayerMovement?.DisableMovement();
+
+            if (m_TaskListRoot != null)
+                m_TaskListRoot.SetActive(false);
+
             ShowVictory();
         }
     }
@@ -94,6 +139,9 @@ public class GameManager : MonoBehaviour
         if (m_VictoryPanel != null)
             m_VictoryPanel.SetActive(false);
 
+        if (m_TaskListRoot != null)
+            m_TaskListRoot.SetActive(false);
+
         if (m_IntroTextDisplay != null)
             m_IntroTextDisplay.text = m_IntroText;
     }
@@ -102,11 +150,27 @@ public class GameManager : MonoBehaviour
     {
         if (m_GameOverPanel != null)
             m_GameOverPanel.SetActive(true);
+
+        if (m_AudioSource != null && m_GameOverClip != null)
+            m_AudioSource.PlayOneShot(m_GameOverClip);
+
+        StartCoroutine(EnableRestartAfterDelay());
     }
 
     private void ShowVictory()
     {
         if (m_VictoryPanel != null)
             m_VictoryPanel.SetActive(true);
+
+        if (m_AudioSource != null && m_VictoryClip != null)
+            m_AudioSource.PlayOneShot(m_VictoryClip);
+
+        StartCoroutine(EnableRestartAfterDelay());
+    }
+
+    private System.Collections.IEnumerator EnableRestartAfterDelay()
+    {
+        yield return new WaitForSeconds(1f);
+        m_CanRestart = true;
     }
 }

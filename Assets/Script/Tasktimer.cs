@@ -2,8 +2,6 @@ using UnityEngine;
 using UnityEngine.Events;
 using TMPro;
 
-/// Countdown timer for a task. Displays remaining time and fires events on expiry.
-/// Attach to a UI Canvas and wire up OnTimerExpired to your game over logic.
 public class TaskTimer : MonoBehaviour
 {
     [Header("Timer Settings")]
@@ -60,7 +58,6 @@ public class TaskTimer : MonoBehaviour
         int seconds = Mathf.FloorToInt(m_TimeRemaining % 60f);
         m_TimerText.text = $"{minutes:00}:{seconds:00}";
 
-        // Visual warning when time is low
         m_TimerText.color = m_TimeRemaining <= 10f ? Color.red : Color.white;
     }
 }
